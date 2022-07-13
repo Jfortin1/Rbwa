@@ -1,0 +1,188 @@
+---
+title: "An introduction to Rbwa"
+output: 
+  github_document:
+    toc: true
+bibliography: vignettes/refs.bib  
+---
+
+
+```{r, echo=FALSE, results="hide"}
+options("knitr.graphics.auto_pdf"=TRUE, eval=TRUE)
+```
+
+
+Authors: Jean-Philippe Fortin
+
+Date: July 13, 2022
+
+
+
+
+
+
+# Introduction
+
+The `Rbwa` package provides an **R** wrapper around the two popular
+*BWA*  aligners `BWA-backtrack` [@bwa1] and `BWA-MEM` [@bwa2].
+
+As mentioned in the BWA manual (see http://bio-bwa.sourceforge.net/bwa.shtml),
+BWA-backtrack is designed for short Illumina reads
+(up to 100bp), while BWA-MEM is more suitable for longer sequences
+(70bp to 1Mbp) and supports split alignment.
+
+
+# Installation
+
+`Rbwa` can be installed from Bioconductor using the following
+commands in a fresh R session:
+
+```{r, eval=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("Rbwa")
+```
+
+
+# Overview
+
+The two main alignment functions are:
+
+- BWA-backtrack: `bwa_aln`
+- BWA-MEM: `bwa_mem`
+
+The package also includes the following convenience functions:
+
+- Genome indexing: `bwa_build_index`
+- Conversion of `bwa_aln` output into SAM output: `bwa_sam`
+- Generation of secondary alignments: `xa2multi`
+
+
+# Build a reference index with `bwa_build_index`
+
+Both `bwa_aln` and `bwa_mem` require first to create a genome index from a
+FASTA file. This is done only once for a given genome.
+This can be done using the function
+`bwa_build_index`. 
+
+First, we load `Rbwa`:
+
+
+```{r loading, eval=TRUE}
+library(Rbwa)
+```
+
+In the following example code, we build a BWA index for a small portion
+of human chr12 that we stored in a FASTA file located within the
+`Rbwa` package. We store the index files in a temporary directory.
+
+
+```{r build_index, eval=TRUE}
+dir <- tempdir()
+fasta <- system.file(package="Rbwa",
+                     "fasta/chr12.fa")
+index_prefix <- file.path(dir, "chr12")
+bwa_build_index(fasta,
+                index_prefix=index_prefix)
+list.files(dir)
+```
+
+
+# Aligment with `bwa_aln`
+
+We now align read sequences stored in the toy example FASTQ file
+`fastq/sequences.fastq`, provided in the `Rbwa` package,
+to our indexed genome: 
+
+```{r bwa_aln, eval=TRUE}
+fastq <- system.file(package="Rbwa",
+                     "fastq/sequences.fastq")
+bwa_aln(index_prefix=index_prefix,
+        fastq_files=fastq,
+        sai_files=file.path(dir, "output.sai"))
+```
+
+Any valid BWA arguments can be passed to the `bwa_aln` function.
+To see the complete list of valid arguments, please visit the BWA reference
+manual: http://bio-bwa.sourceforge.net/bwa.shtml.
+
+For instance, we can specify the maximal edit distance between the query
+sequence and the reference genome to be 3 using `n`, as well as the maximal edit 
+distance in the seed sequence `k` to be 3,
+where we specify that the length of the seed sequence is 13 using
+the argument `l`:
+
+
+```{r bwa_aln2, eval=TRUE}
+bwa_aln(index_prefix=index_prefix,
+        fastq_files=fastq,
+        sai_files=file.path(dir, "output.sai"),
+        n=3, k=3, l=13)
+```
+
+
+## Creating a SAM file
+
+The output of `bwa_aln` is an intermediate `sai` file that should be 
+converted into a `sam` file using the `bwa_sam` function as follows:
+
+```{r bwa_sam, eval=TRUE}
+bwa_sam(index_prefix=index_prefix,
+        fastq_files=fastq,
+        sai_files=file.path(dir, "output.sai"),
+        sam_file=file.path(dir, "output.sam"))
+```
+
+Let's read the first few lines of the SAM file:
+
+```{r reading1, eval=TRUE}
+strtrim(readLines(file.path(dir, "output.sam")), 65)
+```
+
+## Creating a SAM file with secondary alignments
+
+By default, each row of the SAM output corresponds to the best alignment hit 
+for a given input query sequence. Other alignments (secondary alignments,
+or other loci in case of multiple alignments) are stored in the XA tag.
+
+The function `xa2multi` conveniently extracts the alignments from the XA
+tags and represent them as additional rows in the SAM format.
+This can be executed as follows:
+
+```{r bwa_sam_multi, eval=TRUE}
+xa2multi(file.path(dir, "output.sam"),
+         file.path(dir, "output.multi.sam"))
+strtrim(readLines(file.path(dir, "output.multi.sam")), 65)
+```
+
+
+# Aligment with `bwa_mem`
+
+The `bwa_mem` function works similar to the `bwa_aln` function, except
+that it does not produce intermediate `.sai` files; it outputs a SAM file
+directly:
+
+
+```{r bwa_mem, eval=TRUE}
+fastq <- system.file(package="Rbwa",
+                     "fastq/sequences.fastq")
+bwa_mem(index_prefix=index_prefix,
+        fastq_files=fastq,
+        sam_file=file.path(dir, "output.sam"))
+```
+
+```{r reading2, eval=TRUE}
+strtrim(readLines(file.path(dir, "output.sam")), 65)
+```
+
+
+
+
+# Session info
+
+```{r}
+sessionInfo()
+```
+
+# References
